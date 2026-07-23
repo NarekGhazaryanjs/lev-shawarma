@@ -1,6 +1,45 @@
 # LEV Shawarma
 
-Full-stack website for LEV Shawarma with menu, gallery, and admin panel.
+Բարեկամի համար՝ կլոն արա և սերվերը մեկ հրամանով բացիր։
+
+## Արագ մեկնարկ (Windows)
+
+1. Տեղադրիր [Node.js LTS](https://nodejs.org) (եթե չկա)
+2. Կլոն արա և գործարկիր․
+
+```bash
+git clone https://github.com/NarekGhazaryanjs/lev-shawarma.git
+cd lev-shawarma
+scripts\start-here.cmd
+```
+
+Կամ ձեռքով․
+
+```bash
+npm install
+npm run setup
+npm start
+```
+
+Կայք՝ http://localhost:3000  
+Ադմին՝ http://localhost:3000/admin  
+Մուտք՝ `admin` / `levadmin`
+
+## Mac / Linux
+
+```bash
+git clone https://github.com/NarekGhazaryanjs/lev-shawarma.git
+cd lev-shawarma
+chmod +x scripts/start-here.sh
+./scripts/start-here.sh
+```
+
+## Ինչ է անում setup-ը
+
+- ստեղծում է `.env` (եթե չկա)
+- գեներացնում է Prisma client
+- ստեղծում է SQLite DB
+- լցնում է սկզբնական տվյալները (մենյու, էջեր, ադմին)
 
 ## Stack
 
@@ -9,40 +48,18 @@ Full-stack website for LEV Shawarma with menu, gallery, and admin panel.
 - Prisma + SQLite
 - iron-session + bcryptjs
 
-## Run
+## Պորտ 3000-ը զբաղված է Windows-ում
 
-```bash
-npm start
-```
-
-Site: http://localhost:3000  
-Admin: http://localhost:3000/admin
-
-### Port 3000 blocked on Windows?
-
-If `npm start` fails with `EACCES`, Windows has reserved port 3000.
-Run once as **Administrator**:
+Եթե `npm start`-ը տալիս է `EACCES`, մեկ անգամ **Administrator**-ով գործարկիր․
 
 ```
 scripts\fix-port-3000.cmd
 ```
 
-Then restart the PC and run `npm start` again.
+Հետո վերագործարկիր համակարգիչը և նորից `npm start`։
 
-### Admin credentials (change after first login in production)
+## Production
 
-- Username: `admin`
-- Password: `levadmin`
-
-## Admin features
-
-- Menu items CRUD with image upload
-- Categories CRUD
-- Gallery CRUD
-- Site settings (phone, address, social links)
-
-## Production notes
-
-- Set a strong `SESSION_SECRET` in `.env`
-- Change the default admin password
-- Consider PostgreSQL instead of SQLite for production hosting
+- `.env`-ում դրիր ուժեղ `SESSION_SECRET`
+- փոխիր ադմինի գաղտնաբառը
+- production-ում ավելի լավ է PostgreSQL
