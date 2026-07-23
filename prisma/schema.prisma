@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Admin {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
+model Category {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  sortOrder Int        @default(0)
+  items     MenuItem[]
+  createdAt DateTime   @default(now())
+}
+
+model MenuItem {
+  id            Int      @id @default(autoincrement())
+  name          String
+  nameRu        String   @default("")
+  price         String   @default("")
+  description   String   @default("")
+  descriptionRu String   @default("")
+  image         String   @default("")
+  badges        String   @default("[]")
+  featured      Boolean  @default(false)
+  sortOrder     Int      @default(0)
+  categoryId    Int
+  category      Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model GalleryImage {
+  id        Int      @id @default(autoincrement())
+  image     String
+  alt       String   @default("")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model SiteSetting {
+  id          Int    @id @default(1)
+  brandName   String @default("LEV Shawarma")
+  brandNameHy String @default("ԼԵՎ Շաուրմա")
+  brandNameRu String @default("ЛЕВ Шаурма")
+  phone       String
+  address     String
+  addressRu   String @default("")
+  instagram   String
+  facebook    String
+}
+
+model HomePage {
+  id           Int    @id @default(1)
+  heroTagline  String @default("")
+  heroTaglineRu String @default("")
+  aboutText    String @default("")
+  aboutTextRu  String @default("")
+  step1Title   String @default("")
+  step1TitleRu String @default("")
+  step1Text    String @default("")
+  step1TextRu  String @default("")
+  step2Title   String @default("")
+  step2TitleRu String @default("")
+  step2Text    String @default("")
+  step2TextRu  String @default("")
+  step3Title   String @default("")
+  step3TitleRu String @default("")
+  step3Text    String @default("")
+  step3TextRu  String @default("")
+}
+
+model AboutPage {
+  id           Int    @id @default(1)
+  label        String @default("Մեր մասին")
+  labelRu      String @default("")
+  title        String @default("LEV Shawarma")
+  titleRu      String @default("")
+  intro        String @default("")
+  introRu      String @default("")
+  paragraph1   String @default("")
+  paragraph1Ru String @default("")
+  paragraph2   String @default("")
+  paragraph2Ru String @default("")
+  image        String @default("")
+}
+
+model DeliveryPage {
+  id           Int    @id @default(1)
+  label        String @default("Առաքում")
+  labelRu      String @default("")
+  title        String @default("Առաքում")
+  titleRu      String @default("")
+  intro        String @default("")
+  introRu      String @default("")
+  paragraph1   String @default("")
+  paragraph1Ru String @default("")
+  paragraph2   String @default("")
+  paragraph2Ru String @default("")
+  image        String @default("")
+  step1Title   String @default("")
+  step1TitleRu String @default("")
+  step1Text    String @default("")
+  step1TextRu  String @default("")
+  step2Title   String @default("")
+  step2TitleRu String @default("")
+  step2Text    String @default("")
+  step2TextRu  String @default("")
+  step3Title   String @default("")
+  step3TitleRu String @default("")
+  step3Text    String @default("")
+  step3TextRu  String @default("")
+}
+
+model ContactPage {
+  id           Int    @id @default(1)
+  label        String @default("Կապ")
+  labelRu      String @default("")
+  title        String @default("Կապ մեզ հետ")
+  titleRu      String @default("")
+  intro        String @default("")
+  introRu      String @default("")
+  paragraph1   String @default("")
+  paragraph1Ru String @default("")
+  paragraph2   String @default("")
+  paragraph2Ru String @default("")
+  image        String @default("")
+}

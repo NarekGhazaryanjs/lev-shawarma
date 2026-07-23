@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" width="900" height="520">
+  <title>Mariarty Parfume</title>
+  <text
+    x="450"
+    y="110"
+    text-anchor="middle"
+    font-family="Segoe Script, Brush Script MT, Lucida Handwriting, cursive"
+    font-size="56"
+    fill="#001b44"
+  >Mariarty Parfume</text>
+  <ellipse
+    cx="450"
+    cy="300"
+    rx="290"
+    ry="72"
+    fill="none"
+    stroke="#001b44"
+    stroke-width="2.2"
+  />
+  <text
+    x="450"
+    y="312"
+    text-anchor="middle"
+    font-family="Georgia, Times New Roman, serif"
+    font-size="50"
+    font-weight="700"
+    letter-spacing="0.1em"
+    fill="#001b44"
+  >MParfume</text>
+</svg>
