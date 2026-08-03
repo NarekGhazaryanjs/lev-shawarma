@@ -61,12 +61,10 @@ jobs:
 
       - name: Create standalone ZIP
         run: |
-          rm -f deploy.zip
-          cd .next/standalone
-          zip -r ../../../deploy.zip . -x "*.zip"
-          cd ../../..
-          # Also ship root server entry helper if needed
-          ls -lh deploy.zip
+          rm -f "$GITHUB_WORKSPACE/deploy.zip"
+          (cd .next/standalone && zip -r "$GITHUB_WORKSPACE/deploy.zip" . -x "*.zip")
+          ls -lh "$GITHUB_WORKSPACE/deploy.zip"
+          unzip -l "$GITHUB_WORKSPACE/deploy.zip" | head -30
 
       - name: Upload ZIP to server
         uses: appleboy/scp-action@v0.1.7
