@@ -78,6 +78,16 @@ jobs:
             mkdir -p "$APP_DIR/tmp"
             mkdir -p "$APP_DIR/public/uploads"
 
+            NODE_BIN="/home/wmflggzahnbx/nodevenv/levshawarma.com/22/bin"
+
+            if [ ! -d "$NODE_BIN" ]; then
+              echo "ERROR: Node bin directory not found: $NODE_BIN"
+              exit 1
+            fi
+
+            export PATH="$NODE_BIN:$PATH"
+            hash -r
+            
             cd "$APP_DIR"
 
             echo "Backing up persistent files..."
