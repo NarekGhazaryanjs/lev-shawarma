@@ -89,17 +89,33 @@ jobs:
             rm -rf src scripts prisma server.js package.json package-lock.json 2>/dev/null || true
             chmod -R u+rwX "$APP_DIR" 2>/dev/null || true
 
-            # Sync project files (keep uploads + node_modules)
-            rsync -a --delete \
-              --exclude '.env' \
-              --exclude 'dev.db' \
-              --exclude 'dev.db-*' \
-              --exclude 'node_modules' \
-              --exclude '.next' \
-              --exclude 'public/uploads' \
-              --exclude '.deploy-staging' \
-              --exclude 'tmp' \
-              "$STAGE"/ "$APP_DIR"/
+            # Copy project files from staging (keep uploads/node_modules/.env/db)
+            shopt -s dotglob
+            for item in "$STAGE"/*; do
+              name="$(basename "$item")"
+              case "$name" in
+                .env|dev.db|node_modules|.next|tmp|.deploy-staging) continue ;;
+                public)
+                  mkdir -p "$APP_DIR/public"
+                  # copy public except uploads folder contents replacement carefully
+                  for pub in "$item"/*; do
+                    pubname="$(basename "$pub")"
+                    if [ "$pubname" = "uploads" ]; then
+                      mkdir -p "$APP_DIR/public/uploads"
+                      cp -a "$pub"/. "$APP_DIR/public/uploads/" 2>/dev/null || true
+                    else
+                      rm -rf "$APP_DIR/public/$pubname"
+                      cp -a "$pub" "$APP_DIR/public/$pubname"
+                    fi
+                  done
+                  ;;
+                *)
+                  rm -rf "$APP_DIR/$name"
+                  cp -a "$item" "$APP_DIR/$name"
+                  ;;
+              esac
+            done
+            shopt -u dotglob
 
             rm -rf "$STAGE"
 
