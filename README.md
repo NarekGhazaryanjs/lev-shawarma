@@ -68,11 +68,13 @@ scripts\fix-port-3000.cmd
 
 `main` branch push անելիս Action-ը՝
 
-1. build է անում
-2. ZIP է սարքում (առանց `node_modules`)
-3. SCP-ով վերբեռնում է սերվեր
-4. unzip է անում `DEPLOY_PATH`-ում
-5. `npm install` + restart
+1. project ZIP է սարքում (**առանց** `node_modules` / `.next`)
+2. SCP-ով վերբեռնում է սերվեր
+3. unzip է անում `DEPLOY_PATH`-ում
+4. սերվերում `npm install` է անում
+5. restart
+
+Build-ը (`npm run build`) սերվերում առանձին արա, եթե `.next` չկա։
 
 ### GitHub Secrets
 

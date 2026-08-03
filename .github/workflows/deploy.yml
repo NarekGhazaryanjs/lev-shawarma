@@ -10,47 +10,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20.20"
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Create build .env
-        env:
-          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
-        run: |
-          cp .env.example .env
-          if [ -n "$SESSION_SECRET" ]; then
-            sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=\"$SESSION_SECRET\"|" .env
-          fi
-
-      - name: Build Next.js
-        run: npm run build
-
-      - name: Create deploy ZIP
+      - name: Create project ZIP (no node_modules)
         run: |
           rm -f deploy.zip
           zip -r deploy.zip . \
             -x "node_modules/*" \
             -x ".git/*" \
             -x ".github/*" \
+            -x ".next/*" \
             -x ".env" \
             -x "dev.db" \
             -x "dev.db-*" \
-            -x "*.zip" \
-            -x ".next/cache/*"
+            -x "*.zip"
           ls -lh deploy.zip
 
       - name: Upload ZIP to server
@@ -64,7 +43,7 @@ jobs:
           target: /tmp/
           overwrite: true
 
-      - name: Unzip on server and install
+      - name: Unzip and npm install on server
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -90,6 +69,7 @@ jobs:
             mkdir -p "$APP_DIR" "$APP_DIR/tmp" "$APP_DIR/public/uploads"
             cd "$APP_DIR"
 
+            # Keep server .env and database
             if [ -f .env ]; then cp .env /tmp/lev-env.backup; fi
             if [ -f dev.db ]; then cp dev.db /tmp/lev-db.backup; fi
 
@@ -109,9 +89,7 @@ jobs:
             fi
 
             echo "Node: $(node -v)"
-            echo "npm: $(npm -v)"
-
-            npm install --omit=dev
+            npm install
             npx prisma generate
 
             mkdir -p tmp
