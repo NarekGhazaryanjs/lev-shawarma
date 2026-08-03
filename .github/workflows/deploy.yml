@@ -4,17 +4,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      run_npm_install:
-        description: "Also run npm install + prisma generate on the server"
-        required: false
-        type: boolean
-        default: false
-      run_build:
-        description: "Also npm install + prisma generate + npm run build (needed to see code UI changes)"
-        required: false
-        type: boolean
-        default: false
 
 concurrency:
   group: deploy-production
@@ -23,24 +12,37 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create project ZIP (no node_modules)
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.20"
+          cache: npm
+
+      - name: Install and build on CI
+        run: |
+          cp .env.example .env
+          npm ci
+          npx prisma generate
+          npm run build
+
+      - name: Create project ZIP (with .next, no node_modules)
         run: |
           rm -f deploy.zip
           zip -r deploy.zip . \
             -x "node_modules/*" \
             -x ".git/*" \
             -x ".github/*" \
-            -x ".next/*" \
             -x ".env" \
             -x "dev.db" \
             -x "dev.db-*" \
-            -x "*.zip"
+            -x "*.zip" \
+            -x ".next/cache/*"
           ls -lh deploy.zip
 
       - name: Upload ZIP to server
@@ -56,11 +58,8 @@ jobs:
           target: /tmp/
           overwrite: true
 
-      - name: Unzip, copy, and restart app
+      - name: Unzip, install runtime deps, restart
         uses: appleboy/ssh-action@v1.2.0
-        env:
-          RUN_NPM_INSTALL: ${{ github.event.inputs.run_npm_install == 'true' || github.event.inputs.run_build == 'true' }}
-          RUN_BUILD: ${{ github.event.inputs.run_build == 'true' }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
@@ -68,8 +67,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          command_timeout: 40m
-          envs: RUN_NPM_INSTALL,RUN_BUILD
+          command_timeout: 20m
           script: |
             set -euo pipefail
 
@@ -77,19 +75,13 @@ jobs:
             ZIP_PATH="/tmp/deploy.zip"
             STAGE="$APP_DIR/.deploy-staging"
 
-            if [ -z "$APP_DIR" ]; then
-              echo "DEPLOY_PATH secret is empty"
-              exit 1
-            fi
-
-            if [ ! -f "$ZIP_PATH" ]; then
-              echo "ZIP not found at $ZIP_PATH"
+            if [ -z "$APP_DIR" ] || [ ! -f "$ZIP_PATH" ]; then
+              echo "Missing DEPLOY_PATH or ZIP"
               exit 1
             fi
 
             mkdir -p "$APP_DIR" "$APP_DIR/tmp" "$APP_DIR/public/uploads"
             cd "$APP_DIR"
-
             chmod -R u+rwX "$APP_DIR" 2>/dev/null || true
 
             rm -rf "$STAGE"
@@ -99,14 +91,13 @@ jobs:
             if [ -f .env ]; then cp .env /tmp/lev-env.backup; fi
             if [ -f dev.db ]; then cp dev.db /tmp/lev-db.backup; fi
 
-            rm -rf src scripts prisma server.js package.json package-lock.json 2>/dev/null || true
-            chmod -R u+rwX "$APP_DIR" 2>/dev/null || true
+            rm -rf src scripts prisma server.js package.json package-lock.json .next 2>/dev/null || true
 
             shopt -s dotglob
             for item in "$STAGE"/*; do
               name="$(basename "$item")"
               case "$name" in
-                .env|dev.db|node_modules|.next|tmp|.deploy-staging) continue ;;
+                .env|dev.db|node_modules|tmp|.deploy-staging) continue ;;
                 public)
                   mkdir -p "$APP_DIR/public"
                   for pub in "$item"/*; do
@@ -127,50 +118,37 @@ jobs:
               esac
             done
             shopt -u dotglob
-
             rm -rf "$STAGE"
 
             if [ -f /tmp/lev-env.backup ]; then mv /tmp/lev-env.backup .env; fi
             if [ -f /tmp/lev-db.backup ]; then mv /tmp/lev-db.backup dev.db; fi
             if [ ! -f .env ]; then cp .env.example .env; fi
 
-            if [ "${RUN_NPM_INSTALL:-false}" = "true" ] || [ "${RUN_BUILD:-false}" = "true" ]; then
-              echo "Installing dependencies..."
-              set +u
-              for v in 22 20.20 20 22.12 18 19; do
-                ACT="$HOME/nodevenv/levshawarma.com/$v/bin/activate"
-                BIN="$HOME/nodevenv/levshawarma.com/$v/bin"
-                if [ -f "$ACT" ]; then
-                  # shellcheck disable=SC1090
-                  . "$ACT"
-                  echo "Activated nodevenv $v"
-                  break
-                elif [ -x "$BIN/node" ]; then
-                  export PATH="$BIN:$PATH"
-                  echo "Using nodevenv bin $v"
-                  break
-                fi
-              done
-              set -u
-
-              if ! command -v node >/dev/null 2>&1; then
-                echo "ERROR: node not found"
-                exit 1
+            set +u
+            for v in 22 20.20 20 22.12 18 19; do
+              ACT="$HOME/nodevenv/levshawarma.com/$v/bin/activate"
+              BIN="$HOME/nodevenv/levshawarma.com/$v/bin"
+              if [ -f "$ACT" ]; then
+                # shellcheck disable=SC1090
+                . "$ACT"
+                echo "Activated nodevenv $v"
+                break
+              elif [ -x "$BIN/node" ]; then
+                export PATH="$BIN:$PATH"
+                echo "Using nodevenv bin $v"
+                break
               fi
+            done
+            set -u
 
+            if command -v node >/dev/null 2>&1; then
               echo "Node: $(node -v)"
-              echo "npm: $(npm -v)"
               cd "$APP_DIR"
-              # Avoid postinstall prisma generate in wrong CloudLinux npm prefix cwd
               npm install --ignore-scripts
-              npx prisma generate --schema=./prisma/schema.prisma
-
-              if [ "${RUN_BUILD:-false}" = "true" ]; then
-                echo "Building Next.js..."
-                npm run build
-              fi
+              npx prisma generate --schema=./prisma/schema.prisma || true
+              npm rebuild better-sqlite3 || true
             else
-              echo "Skipping npm install/build (default). Restart only."
+              echo "WARNING: node not found; uploaded .next only. Restarting app."
             fi
 
             mkdir -p tmp
@@ -179,4 +157,4 @@ jobs:
             if [ -d "$HOME/tmp" ]; then touch "$HOME/tmp/restart.txt" 2>/dev/null || true; fi
 
             rm -f "$ZIP_PATH"
-            echo "Deploy finished → $APP_DIR (restart signaled)"
+            echo "Deploy finished → $APP_DIR"
