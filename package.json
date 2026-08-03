@@ -8,7 +8,7 @@
     "start": "node server.js",
     "start:next": "next start --hostname 127.0.0.1",
     "setup": "node scripts/setup.mjs",
-    "postinstall": "prisma generate",
+    "postinstall": "node scripts/postinstall.js",
     "lint": "eslint",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
