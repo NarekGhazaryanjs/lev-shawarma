@@ -30,13 +30,10 @@ jobs:
             -x ".github/*" \
             -x ".next/*" \
             -x ".env" \
-            -x ".env.*" \
-            -x "dev.db" \
             -x "dev.db-*" \
             -x "*.db-journal" \
             -x "*.db-wal" \
             -x "*.db-shm" \
-            -x "public/uploads/*" \
             -x "tmp/*" \
             -x "*.zip"
 
