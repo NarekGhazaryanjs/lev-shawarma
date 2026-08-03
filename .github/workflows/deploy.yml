@@ -123,13 +123,39 @@ jobs:
             if [ -f /tmp/lev-db.backup ]; then mv /tmp/lev-db.backup dev.db; fi
             if [ ! -f .env ]; then cp .env.example .env; fi
 
-            if [ -d "$HOME/nodevenv/levshawarma.com/20/bin" ]; then
-              export PATH="$HOME/nodevenv/levshawarma.com/20/bin:$PATH"
-            elif [ -d "$HOME/nodevenv/levshawarma.com/20.20/bin" ]; then
-              export PATH="$HOME/nodevenv/levshawarma.com/20.20/bin:$PATH"
+            echo "Looking for Node.js..."
+            ls -la "$HOME/nodevenv/levshawarma.com" || true
+
+            for v in 20.20 20 22 22.12 18 19; do
+              ACT="$HOME/nodevenv/levshawarma.com/$v/bin/activate"
+              BIN="$HOME/nodevenv/levshawarma.com/$v/bin"
+              if [ -f "$ACT" ]; then
+                # shellcheck disable=SC1090
+                . "$ACT"
+                echo "Activated nodevenv $v"
+                break
+              elif [ -x "$BIN/node" ]; then
+                export PATH="$BIN:$PATH"
+                echo "Using nodevenv bin $v"
+                break
+              fi
+            done
+
+            if ! command -v node >/dev/null 2>&1; then
+              NODE_BIN="$(find "$HOME/nodevenv" -type f -name node 2>/dev/null | head -n 1 || true)"
+              if [ -n "$NODE_BIN" ]; then
+                export PATH="$(dirname "$NODE_BIN"):$PATH"
+                echo "Found node at $NODE_BIN"
+              fi
+            fi
+
+            if ! command -v node >/dev/null 2>&1; then
+              echo "ERROR: node not found. Set Node.js App version to 20.20 in cPanel."
+              exit 1
             fi
 
             echo "Node: $(node -v)"
+            echo "npm: $(npm -v)"
             npm install
             npx prisma generate
 
