@@ -146,7 +146,9 @@ jobs:
 
             echo "Activating Node.js environment..."
 
+            set +u
             source "$NODE_ACTIVATE"
+            set -u
 
             cd "$APP_DIR"
 
