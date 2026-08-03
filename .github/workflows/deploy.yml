@@ -10,6 +10,11 @@ on:
         required: false
         type: boolean
         default: false
+      run_build:
+        description: "Also npm install + prisma generate + npm run build (needed to see code UI changes)"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-production
@@ -54,7 +59,8 @@ jobs:
       - name: Unzip, copy, and restart app
         uses: appleboy/ssh-action@v1.2.0
         env:
-          RUN_NPM_INSTALL: ${{ github.event.inputs.run_npm_install == 'true' }}
+          RUN_NPM_INSTALL: ${{ github.event.inputs.run_npm_install == 'true' || github.event.inputs.run_build == 'true' }}
+          RUN_BUILD: ${{ github.event.inputs.run_build == 'true' }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
@@ -62,7 +68,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          envs: RUN_NPM_INSTALL
+          envs: RUN_NPM_INSTALL,RUN_BUILD
           script: |
             set -euo pipefail
 
@@ -130,8 +136,8 @@ jobs:
             if [ -f /tmp/lev-db.backup ]; then mv /tmp/lev-db.backup dev.db; fi
             if [ ! -f .env ]; then cp .env.example .env; fi
 
-            if [ "${RUN_NPM_INSTALL:-false}" = "true" ]; then
-              echo "Optional npm install requested..."
+            if [ "${RUN_NPM_INSTALL:-false}" = "true" ] || [ "${RUN_BUILD:-false}" = "true" ]; then
+              echo "Installing dependencies..."
               for v in 22 20.20 20 22.12 18 19; do
                 BIN="$HOME/nodevenv/levshawarma.com/$v/bin"
                 if [ -x "$BIN/node" ]; then
@@ -142,7 +148,7 @@ jobs:
               done
 
               if ! command -v node >/dev/null 2>&1; then
-                echo "ERROR: node not found for optional npm install"
+                echo "ERROR: node not found"
                 exit 1
               fi
 
@@ -150,10 +156,14 @@ jobs:
               echo "npm: $(npm -v)"
               npm install --prefix "$APP_DIR"
               (cd "$APP_DIR" && npx prisma generate)
-            else
-              echo "Skipping npm install (default). Restart only."
-            fi
 
+              if [ "${RUN_BUILD:-false}" = "true" ]; then
+                echo "Building Next.js..."
+                (cd "$APP_DIR" && npm run build)
+              fi
+            else
+              echo "Skipping npm install/build (default). Restart only."
+            fi
             # cPanel Node.js app restart signals
             mkdir -p tmp
             touch tmp/restart.txt
