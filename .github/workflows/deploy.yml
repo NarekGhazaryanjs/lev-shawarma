@@ -12,59 +12,25 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20.20"
-          cache: npm
-
-      - name: Install and build standalone
+      - name: Create project ZIP (no node_modules)
         run: |
-          cp .env.example .env
-          npm ci
-          npx prisma generate
-          npm run build
-
-          # Standalone bundle needs static assets beside Next server.js
-          cp -r public .next/standalone/public
-          mkdir -p .next/standalone/.next
-          cp -r .next/static .next/standalone/.next/static
-
-          # Prisma schema + generated client for runtime
-          mkdir -p .next/standalone/prisma .next/standalone/src
-          cp prisma/schema.prisma .next/standalone/prisma/
-          cp -r src/generated .next/standalone/src/ 2>/dev/null || true
-          cp .env.example .next/standalone/.env.example
-          cp prisma.config.ts .next/standalone/ 2>/dev/null || true
-
-          # Ensure native sqlite bits are present inside standalone node_modules
-          mkdir -p .next/standalone/node_modules
-          for pkg in better-sqlite3 @prisma/adapter-better-sqlite3 @prisma/client @prisma/engines; do
-            if [ -e "node_modules/$pkg" ]; then
-              mkdir -p ".next/standalone/node_modules/$(dirname "$pkg")"
-              rm -rf ".next/standalone/node_modules/$pkg"
-              cp -a "node_modules/$pkg" ".next/standalone/node_modules/$pkg"
-            fi
-          done
-          # copy .prisma if present
-          if [ -d node_modules/.prisma ]; then
-            cp -a node_modules/.prisma .next/standalone/node_modules/.prisma
-          fi
-
-          ls -la .next/standalone | head
-
-      - name: Create standalone ZIP
-        run: |
-          rm -f "$GITHUB_WORKSPACE/deploy.zip"
-          (cd .next/standalone && zip -r "$GITHUB_WORKSPACE/deploy.zip" . -x "*.zip")
-          ls -lh "$GITHUB_WORKSPACE/deploy.zip"
-          unzip -l "$GITHUB_WORKSPACE/deploy.zip" | head -30
+          rm -f deploy.zip
+          zip -r deploy.zip . \
+            -x "node_modules/*" \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x ".next/*" \
+            -x ".env" \
+            -x "dev.db" \
+            -x "dev.db-*" \
+            -x "*.zip"
+          ls -lh deploy.zip
 
       - name: Upload ZIP to server
         uses: appleboy/scp-action@v0.1.7
@@ -73,30 +39,32 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: ${{ secrets.SSH_PORT || 22 }}
           source: deploy.zip
           target: /tmp/
           overwrite: true
 
-      - name: Unzip standalone and restart
+      - name: Unzip and npm install on server
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          command_timeout: 10m
           script: |
             set -euo pipefail
 
             APP_DIR="${{ secrets.DEPLOY_PATH }}"
             ZIP_PATH="/tmp/deploy.zip"
 
-            if [ -z "$APP_DIR" ] || [ ! -f "$ZIP_PATH" ]; then
-              echo "Missing DEPLOY_PATH or ZIP"
+            if [ -z "$APP_DIR" ]; then
+              echo "DEPLOY_PATH secret is empty"
+              exit 1
+            fi
+
+            if [ ! -f "$ZIP_PATH" ]; then
+              echo "ZIP not found at $ZIP_PATH"
               exit 1
             fi
 
@@ -106,42 +74,27 @@ jobs:
             if [ -f .env ]; then cp .env /tmp/lev-env.backup; fi
             if [ -f dev.db ]; then cp dev.db /tmp/lev-db.backup; fi
 
-            # Keep uploads, wipe rest of app files carefully
-            mkdir -p /tmp/lev-uploads-backup
-            if [ -d public/uploads ]; then cp -a public/uploads/. /tmp/lev-uploads-backup/ 2>/dev/null || true; fi
-
-            # Extract standalone bundle into app root
-            unzip -o "$ZIP_PATH" -d "$APP_DIR"
+            unzip -o "$ZIP_PATH"
 
             if [ -f /tmp/lev-env.backup ]; then mv /tmp/lev-env.backup .env; fi
             if [ -f /tmp/lev-db.backup ]; then mv /tmp/lev-db.backup dev.db; fi
-            if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || true; fi
 
-            mkdir -p public/uploads
-            if [ -d /tmp/lev-uploads-backup ]; then
-              cp -a /tmp/lev-uploads-backup/. public/uploads/ 2>/dev/null || true
-              rm -rf /tmp/lev-uploads-backup
-            fi
-
-            # Standalone includes its own node_modules — ensure startup file for cPanel
-            if [ -f server.js ]; then
-              echo "standalone server.js present"
-            else
-              echo "ERROR: standalone server.js missing"
-              ls -la
-              exit 1
-            fi
-
-            # Make sure DB path works
             if [ ! -f .env ]; then
-              echo 'DATABASE_URL="file:./dev.db"' > .env
-              echo 'SESSION_SECRET="lev-shawarma-prod-secret-change-me-32chars"' >> .env
+              cp .env.example .env
             fi
+
+            if [ -d "$HOME/nodevenv/levshawarma.com/20/bin" ]; then
+              export PATH="$HOME/nodevenv/levshawarma.com/20/bin:$PATH"
+            elif [ -d "$HOME/nodevenv/levshawarma.com/20.20/bin" ]; then
+              export PATH="$HOME/nodevenv/levshawarma.com/20.20/bin:$PATH"
+            fi
+
+            echo "Node: $(node -v)"
+            npm install
+            npx prisma generate
 
             mkdir -p tmp
             touch tmp/restart.txt
-            if [ -d "$HOME/tmp" ]; then touch "$HOME/tmp/restart.txt" 2>/dev/null || true; fi
 
             rm -f "$ZIP_PATH"
-            echo "Deploy finished → $APP_DIR (standalone + restart)"
-            ls -la server.js .next 2>/dev/null || true
+            echo "Deploy finished → $APP_DIR"

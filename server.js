@@ -4,15 +4,10 @@ const next = require("next");
 
 const dev = process.env.NODE_ENV !== "production";
 const port = Number(process.env.PORT) || 5000;
+// Hosting (rage.am) needs 0.0.0.0; local default is fine too.
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 
-const app = next({
-  dev,
-  hostname,
-  port,
-  // Prefer standalone build dir when present (production hosting)
-  dir: process.cwd(),
-});
+const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 app

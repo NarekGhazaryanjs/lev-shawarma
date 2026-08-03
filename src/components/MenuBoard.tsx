@@ -50,7 +50,7 @@ export function MenuBoard({
       <div className="shell pb-20">
         <div className="mb-10 pt-12 md:pt-16">
           <p className="label mb-3">{dict.menu.eyebrow}</p>
-          <h1 className="title-lg text-blue-600">{dict.menu.title}</h1>
+          <h1 className="title-lg">{dict.menu.title}</h1>
         </div>
 
         <div className="pill-rail mb-8">
