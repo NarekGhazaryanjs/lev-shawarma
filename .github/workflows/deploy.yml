@@ -131,18 +131,15 @@ jobs:
 
             echo "Installing dependencies..."
 
-            npm --prefix "$APP_DIR" install --ignore-scripts
+            npm --prefix "$APP_DIR" install \
+              --ignore-scripts
 
             echo "Running setup..."
 
             npm --prefix "$APP_DIR" run setup
 
-            echo "Building application..."
+            echo "Building..."
 
             npm --prefix "$APP_DIR" run build
-
-            echo "Removing development dependencies..."
-
-            npm --prefix "$APP_DIR" prune --omit=dev
 
             echo "Deploy completed successfully."
