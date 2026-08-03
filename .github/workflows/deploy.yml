@@ -154,14 +154,15 @@ jobs:
 
               echo "Node: $(node -v)"
               echo "npm: $(npm -v)"
-              npm install --prefix "$APP_DIR"
-              (cd "$APP_DIR" && npx prisma generate)
+              cd "$APP_DIR"
+              npm install
+              npx prisma generate
 
               if [ "${RUN_BUILD:-false}" = "true" ]; then
                 echo "Building Next.js..."
-                (cd "$APP_DIR" && npm run build)
+                npm run build
               fi
-            else
+              cd "$APP_DIR"            else
               echo "Skipping npm install/build (default). Restart only."
             fi
             # cPanel Node.js app restart signals
