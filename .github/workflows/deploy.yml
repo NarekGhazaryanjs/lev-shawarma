@@ -39,6 +39,14 @@ jobs:
 
           ls -lh deploy.zip
 
+          echo "SSH user: $(whoami)"
+          echo "HOME: $HOME"
+          echo "APP_DIR: $APP_DIR"
+
+          ls -la "$HOME" || true
+          ls -la "$HOME/nodevenv" || true
+          find "$HOME/nodevenv" -maxdepth 5 -type f -name node 2>/dev/null || true
+
       - name: Upload ZIP to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -87,7 +95,7 @@ jobs:
 
             export PATH="$NODE_BIN:$PATH"
             hash -r
-            
+
             cd "$APP_DIR"
 
             echo "Backing up persistent files..."
