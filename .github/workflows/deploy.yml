@@ -66,7 +66,6 @@ jobs:
 
             APP_DIR="${{ secrets.DEPLOY_PATH }}"
             ZIP_PATH="/tmp/deploy.zip"
-            NODE_ACTIVATE="$HOME/nodevenv/levshawarma.com/22/bin/activate"
 
             if [ -z "$APP_DIR" ]; then
               echo "ERROR: DEPLOY_PATH secret is empty"
@@ -75,11 +74,6 @@ jobs:
 
             if [ ! -f "$ZIP_PATH" ]; then
               echo "ERROR: ZIP not found at $ZIP_PATH"
-              exit 1
-            fi
-
-            if [ ! -f "$NODE_ACTIVATE" ]; then
-              echo "ERROR: Node environment not found: $NODE_ACTIVATE"
               exit 1
             fi
 
@@ -144,12 +138,6 @@ jobs:
               fi
             fi
 
-            echo "Activating Node.js environment..."
-
-            set +u
-            source "$NODE_ACTIVATE"
-            set -u
-
             cd "$APP_DIR"
 
             echo "Node: $(node -v)"
@@ -163,15 +151,9 @@ jobs:
 
             echo "Installing dependencies..."
 
-            if [ -f package-lock.json ]; then
-              npm --prefix "$APP_DIR" ci \
-                --ignore-scripts \
-                --include=dev
-            else
-              npm --prefix "$APP_DIR" install \
-                --ignore-scripts \
-                --include=dev
-            fi
+            npm --prefix "$APP_DIR" install \
+              --ignore-scripts \
+              --include=dev
 
             echo "Running setup..."
 
