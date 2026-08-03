@@ -40,5 +40,5 @@ run("npx", ["tsx", "prisma/seed.ts"]);
 
 console.log("\nSetup done.");
 console.log("Run:  npm start");
-console.log("Site: http://localhost:3000");
-console.log("Admin: http://localhost:3000/admin  (admin / levadmin)");
+console.log("Site: http://localhost:5000");
+console.log("Admin: http://localhost:5000/admin  (admin / levadmin)");

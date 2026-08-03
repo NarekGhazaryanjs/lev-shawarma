@@ -1,0 +1,121 @@
+name: Deploy to server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create build .env
+        env:
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+        run: |
+          cp .env.example .env
+          if [ -n "$SESSION_SECRET" ]; then
+            sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=\"$SESSION_SECRET\"|" .env
+          fi
+
+      - name: Build Next.js
+        run: npm run build
+
+      - name: Create deploy ZIP
+        run: |
+          rm -f deploy.zip
+          zip -r deploy.zip . \
+            -x "node_modules/*" \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x ".env" \
+            -x "dev.db" \
+            -x "dev.db-*" \
+            -x "*.zip" \
+            -x ".next/cache/*"
+          ls -lh deploy.zip
+
+      - name: Upload ZIP to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: deploy.zip
+          target: /tmp/
+          overwrite: true
+
+      - name: Unzip on server and install
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -euo pipefail
+
+            APP_DIR="${{ secrets.DEPLOY_PATH }}"
+            ZIP_PATH="/tmp/deploy.zip"
+
+            if [ -z "$APP_DIR" ]; then
+              echo "DEPLOY_PATH secret is empty"
+              exit 1
+            fi
+
+            if [ ! -f "$ZIP_PATH" ]; then
+              echo "ZIP not found at $ZIP_PATH"
+              exit 1
+            fi
+
+            mkdir -p "$APP_DIR" "$APP_DIR/tmp" "$APP_DIR/public/uploads"
+            cd "$APP_DIR"
+
+            if [ -f .env ]; then cp .env /tmp/lev-env.backup; fi
+            if [ -f dev.db ]; then cp dev.db /tmp/lev-db.backup; fi
+
+            unzip -o "$ZIP_PATH"
+
+            if [ -f /tmp/lev-env.backup ]; then mv /tmp/lev-env.backup .env; fi
+            if [ -f /tmp/lev-db.backup ]; then mv /tmp/lev-db.backup dev.db; fi
+
+            if [ ! -f .env ]; then
+              cp .env.example .env
+            fi
+
+            if [ -d "$HOME/nodevenv/levshawarma.com/20/bin" ]; then
+              export PATH="$HOME/nodevenv/levshawarma.com/20/bin:$PATH"
+            elif [ -d "$HOME/nodevenv/levshawarma.com/20.20/bin" ]; then
+              export PATH="$HOME/nodevenv/levshawarma.com/20.20/bin:$PATH"
+            fi
+
+            echo "Node: $(node -v)"
+            echo "npm: $(npm -v)"
+
+            npm install --omit=dev
+            npx prisma generate
+
+            mkdir -p tmp
+            touch tmp/restart.txt
+
+            rm -f "$ZIP_PATH"
+            echo "Deploy finished → $APP_DIR"

@@ -3,15 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "npm start",
+    "dev": "next dev --port 5000 --hostname 127.0.0.1",
     "build": "prisma generate && next build",
-    "start": "next dev --port 3000 --hostname 127.0.0.1",
-    "start:prod": "next start --port 3000 --hostname 127.0.0.1",
+    "start": "node server.js",
+    "start:next": "next start --hostname 127.0.0.1",
     "setup": "node scripts/setup.mjs",
     "postinstall": "prisma generate",
     "lint": "eslint",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "prestart": "node -e \"const fs=require('fs'); if(!fs.existsSync('.next')) { console.error('Run npm run build first'); process.exit(1); }\""
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

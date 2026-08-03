@@ -28,7 +28,7 @@ echo "Preparing database..."
 npm run setup
 
 echo
-echo "Starting server on http://localhost:3000"
-echo "Admin: http://localhost:3000/admin  (admin / levadmin)"
+echo "Starting server on http://localhost:5000"
+echo "Admin: http://localhost:5000/admin  (admin / levadmin)"
 echo
 npm start

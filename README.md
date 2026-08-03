@@ -21,8 +21,8 @@ npm run setup
 npm start
 ```
 
-Կայք՝ http://localhost:3000  
-Ադմին՝ http://localhost:3000/admin  
+Կայք՝ http://localhost:5000  
+Ադմին՝ http://localhost:5000/admin  
 Մուտք՝ `admin` / `levadmin`
 
 ## Mac / Linux
@@ -63,3 +63,39 @@ scripts\fix-port-3000.cmd
 - `.env`-ում դրիր ուժեղ `SESSION_SECRET`
 - փոխիր ադմինի գաղտնաբառը
 - production-ում ավելի լավ է PostgreSQL
+
+## CI/CD (GitHub Actions → server)
+
+`main` branch push անելիս Action-ը՝
+
+1. build է անում
+2. ZIP է սարքում (առանց `node_modules`)
+3. SCP-ով վերբեռնում է սերվեր
+4. unzip է անում `DEPLOY_PATH`-ում
+5. `npm install` + restart
+
+### GitHub Secrets
+
+Repo → **Settings → Secrets and variables → Actions**՝ ավելացրու՝
+
+| Secret | Example |
+|--------|---------|
+| `SSH_HOST` | `levshawarma.com` կամ սերվերի IP |
+| `SSH_USERNAME` | `wmflggzahnbx` |
+| `SSH_PRIVATE_KEY` | SSH private key (ամբողջական) |
+| `DEPLOY_PATH` | `/home/wmflggzahnbx/levshawarma.com` |
+| `SSH_PORT` | `22` (optional) |
+| `SESSION_SECRET` | երկար գաղտնի բանալի (optional) |
+
+### SSH key
+
+Լոկալում՝
+
+```bash
+ssh-keygen -t ed25519 -C "github-deploy" -f lev-deploy -N ""
+```
+
+`lev-deploy.pub` ավելացրու սերվերի `~/.ssh/authorized_keys`-ում։  
+`lev-deploy` private key-ի ամբողջ տեքստը դրիր `SSH_PRIVATE_KEY` secret-ում։
+
+Սերվերում Node-ը պետք է լինի **20.19+** (օր. 20.20)։
