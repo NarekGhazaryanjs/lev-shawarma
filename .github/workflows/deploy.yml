@@ -126,15 +126,9 @@ jobs:
             echo "Looking for Node.js..."
             ls -la "$HOME/nodevenv/levshawarma.com" || true
 
-            for v in 20.20 20 22 22.12 18 19; do
-              ACT="$HOME/nodevenv/levshawarma.com/$v/bin/activate"
+            for v in 22 20.20 20 22.12 18 19; do
               BIN="$HOME/nodevenv/levshawarma.com/$v/bin"
-              if [ -f "$ACT" ]; then
-                # shellcheck disable=SC1090
-                . "$ACT"
-                echo "Activated nodevenv $v"
-                break
-              elif [ -x "$BIN/node" ]; then
+              if [ -x "$BIN/node" ]; then
                 export PATH="$BIN:$PATH"
                 echo "Using nodevenv bin $v"
                 break
@@ -150,7 +144,7 @@ jobs:
             fi
 
             if ! command -v node >/dev/null 2>&1; then
-              echo "ERROR: node not found. Set Node.js App version to 20.20 in cPanel."
+              echo "ERROR: node not found. Set Node.js App version to 20.20+ or 22.12+ in cPanel."
               exit 1
             fi
 
