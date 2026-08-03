@@ -24,25 +24,48 @@ jobs:
           node-version: "20.20"
           cache: npm
 
-      - name: Install and build on CI
+      - name: Install and build standalone
         run: |
           cp .env.example .env
           npm ci
           npx prisma generate
           npm run build
 
-      - name: Create project ZIP (with .next, no node_modules)
+          # Standalone bundle needs static assets beside Next server.js
+          cp -r public .next/standalone/public
+          mkdir -p .next/standalone/.next
+          cp -r .next/static .next/standalone/.next/static
+
+          # Prisma schema + generated client for runtime
+          mkdir -p .next/standalone/prisma .next/standalone/src
+          cp prisma/schema.prisma .next/standalone/prisma/
+          cp -r src/generated .next/standalone/src/ 2>/dev/null || true
+          cp .env.example .next/standalone/.env.example
+          cp prisma.config.ts .next/standalone/ 2>/dev/null || true
+
+          # Ensure native sqlite bits are present inside standalone node_modules
+          mkdir -p .next/standalone/node_modules
+          for pkg in better-sqlite3 @prisma/adapter-better-sqlite3 @prisma/client @prisma/engines; do
+            if [ -e "node_modules/$pkg" ]; then
+              mkdir -p ".next/standalone/node_modules/$(dirname "$pkg")"
+              rm -rf ".next/standalone/node_modules/$pkg"
+              cp -a "node_modules/$pkg" ".next/standalone/node_modules/$pkg"
+            fi
+          done
+          # copy .prisma if present
+          if [ -d node_modules/.prisma ]; then
+            cp -a node_modules/.prisma .next/standalone/node_modules/.prisma
+          fi
+
+          ls -la .next/standalone | head
+
+      - name: Create standalone ZIP
         run: |
           rm -f deploy.zip
-          zip -r deploy.zip . \
-            -x "node_modules/*" \
-            -x ".git/*" \
-            -x ".github/*" \
-            -x ".env" \
-            -x "dev.db" \
-            -x "dev.db-*" \
-            -x "*.zip" \
-            -x ".next/cache/*"
+          cd .next/standalone
+          zip -r ../../../deploy.zip . -x "*.zip"
+          cd ../../..
+          # Also ship root server entry helper if needed
           ls -lh deploy.zip
 
       - name: Upload ZIP to server
@@ -58,7 +81,7 @@ jobs:
           target: /tmp/
           overwrite: true
 
-      - name: Unzip, install runtime deps, restart
+      - name: Unzip standalone and restart
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -67,13 +90,12 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          command_timeout: 20m
+          command_timeout: 10m
           script: |
             set -euo pipefail
 
             APP_DIR="${{ secrets.DEPLOY_PATH }}"
             ZIP_PATH="/tmp/deploy.zip"
-            STAGE="$APP_DIR/.deploy-staging"
 
             if [ -z "$APP_DIR" ] || [ ! -f "$ZIP_PATH" ]; then
               echo "Missing DEPLOY_PATH or ZIP"
@@ -82,79 +104,46 @@ jobs:
 
             mkdir -p "$APP_DIR" "$APP_DIR/tmp" "$APP_DIR/public/uploads"
             cd "$APP_DIR"
-            chmod -R u+rwX "$APP_DIR" 2>/dev/null || true
-
-            rm -rf "$STAGE"
-            mkdir -p "$STAGE"
-            unzip -o "$ZIP_PATH" -d "$STAGE"
 
             if [ -f .env ]; then cp .env /tmp/lev-env.backup; fi
             if [ -f dev.db ]; then cp dev.db /tmp/lev-db.backup; fi
 
-            rm -rf src scripts prisma server.js package.json package-lock.json .next 2>/dev/null || true
+            # Keep uploads, wipe rest of app files carefully
+            mkdir -p /tmp/lev-uploads-backup
+            if [ -d public/uploads ]; then cp -a public/uploads/. /tmp/lev-uploads-backup/ 2>/dev/null || true; fi
 
-            shopt -s dotglob
-            for item in "$STAGE"/*; do
-              name="$(basename "$item")"
-              case "$name" in
-                .env|dev.db|node_modules|tmp|.deploy-staging) continue ;;
-                public)
-                  mkdir -p "$APP_DIR/public"
-                  for pub in "$item"/*; do
-                    pubname="$(basename "$pub")"
-                    if [ "$pubname" = "uploads" ]; then
-                      mkdir -p "$APP_DIR/public/uploads"
-                      cp -a "$pub"/. "$APP_DIR/public/uploads/" 2>/dev/null || true
-                    else
-                      rm -rf "$APP_DIR/public/$pubname"
-                      cp -a "$pub" "$APP_DIR/public/$pubname"
-                    fi
-                  done
-                  ;;
-                *)
-                  rm -rf "$APP_DIR/$name"
-                  cp -a "$item" "$APP_DIR/$name"
-                  ;;
-              esac
-            done
-            shopt -u dotglob
-            rm -rf "$STAGE"
+            # Extract standalone bundle into app root
+            unzip -o "$ZIP_PATH" -d "$APP_DIR"
 
             if [ -f /tmp/lev-env.backup ]; then mv /tmp/lev-env.backup .env; fi
             if [ -f /tmp/lev-db.backup ]; then mv /tmp/lev-db.backup dev.db; fi
-            if [ ! -f .env ]; then cp .env.example .env; fi
+            if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || true; fi
 
-            set +u
-            for v in 22 20.20 20 22.12 18 19; do
-              ACT="$HOME/nodevenv/levshawarma.com/$v/bin/activate"
-              BIN="$HOME/nodevenv/levshawarma.com/$v/bin"
-              if [ -f "$ACT" ]; then
-                # shellcheck disable=SC1090
-                . "$ACT"
-                echo "Activated nodevenv $v"
-                break
-              elif [ -x "$BIN/node" ]; then
-                export PATH="$BIN:$PATH"
-                echo "Using nodevenv bin $v"
-                break
-              fi
-            done
-            set -u
+            mkdir -p public/uploads
+            if [ -d /tmp/lev-uploads-backup ]; then
+              cp -a /tmp/lev-uploads-backup/. public/uploads/ 2>/dev/null || true
+              rm -rf /tmp/lev-uploads-backup
+            fi
 
-            if command -v node >/dev/null 2>&1; then
-              echo "Node: $(node -v)"
-              cd "$APP_DIR"
-              npm install --ignore-scripts
-              npx prisma generate --schema=./prisma/schema.prisma || true
-              npm rebuild better-sqlite3 || true
+            # Standalone includes its own node_modules — ensure startup file for cPanel
+            if [ -f server.js ]; then
+              echo "standalone server.js present"
             else
-              echo "WARNING: node not found; uploaded .next only. Restarting app."
+              echo "ERROR: standalone server.js missing"
+              ls -la
+              exit 1
+            fi
+
+            # Make sure DB path works
+            if [ ! -f .env ]; then
+              echo 'DATABASE_URL="file:./dev.db"' > .env
+              echo 'SESSION_SECRET="lev-shawarma-prod-secret-change-me-32chars"' >> .env
             fi
 
             mkdir -p tmp
             touch tmp/restart.txt
-            touch "$APP_DIR/tmp/restart.txt"
             if [ -d "$HOME/tmp" ]; then touch "$HOME/tmp/restart.txt" 2>/dev/null || true; fi
 
             rm -f "$ZIP_PATH"
-            echo "Deploy finished → $APP_DIR"
+            echo "Deploy finished → $APP_DIR (standalone + restart)"
+            ls -la server.js .next 2>/dev/null || true
