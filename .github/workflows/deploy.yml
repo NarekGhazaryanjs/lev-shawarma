@@ -9,6 +9,9 @@ concurrency:
   group: deploy-production
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -18,19 +21,56 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+
+          npm --prefix "$GITHUB_WORKSPACE" install \
+            --ignore-scripts \
+            --include=dev
+
+      - name: Run setup
+        run: |
+          set -euo pipefail
+
+          npm --prefix "$GITHUB_WORKSPACE" run setup
+
+      - name: Build application
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          set -euo pipefail
+
+          npm --prefix "$GITHUB_WORKSPACE" run build
+
+      - name: Remove node_modules
+        run: |
+          set -euo pipefail
+
+          rm -rf "$GITHUB_WORKSPACE/node_modules"
+
       - name: Create project ZIP
         run: |
           set -euo pipefail
 
+          cd "$GITHUB_WORKSPACE"
+
           rm -f deploy.zip
 
           zip -r deploy.zip . \
-            -x "node_modules/*" \
             -x ".git/*" \
             -x ".github/*" \
+            -x "node_modules/*" \
             -x "tmp/*" \
             -x "*.zip"
 
+          echo "Deployment ZIP:"
           ls -lh deploy.zip
 
       - name: Upload ZIP to server
@@ -51,7 +91,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          command_timeout: 30m
+          command_timeout: 10m
           script: |
             set -eo pipefail
 
@@ -59,22 +99,14 @@ jobs:
             ZIP_PATH="/tmp/deploy.zip"
 
             if [ -z "$APP_DIR" ]; then
-              echo "DEPLOY_PATH is empty"
+              echo "ERROR: DEPLOY_PATH secret is empty"
               exit 1
             fi
 
             if [ ! -f "$ZIP_PATH" ]; then
-              echo "deploy.zip not found"
+              echo "ERROR: deploy.zip not found at $ZIP_PATH"
               exit 1
             fi
-
-            APP_HOME="$(dirname "$APP_DIR")"
-            APP_NAME="$(basename "$APP_DIR")"
-
-            NODE_BIN="${{ secrets.NODE_BIN }}"
-
-            export PATH="$NODE_BIN:$PATH"
-            hash -r
 
             mkdir -p "$APP_DIR"
             mkdir -p "$APP_DIR/tmp"
@@ -82,59 +114,83 @@ jobs:
 
             cd "$APP_DIR"
 
-            echo "Backing up persistent files..."
+            echo "Cleaning old backups..."
 
-            rm -rf /tmp/lev-env.backup
-            rm -rf /tmp/lev-db.backup
+            rm -f /tmp/lev-env.backup
+            rm -f /tmp/lev-db.backup
+            rm -f /tmp/lev-db-wal.backup
+            rm -f /tmp/lev-db-shm.backup
             rm -rf /tmp/lev-uploads.backup
 
-            if [ -f ".env" ]; then
-              cp .env /tmp/lev-env.backup
+            echo "Backing up persistent files..."
+
+            if [ -f "$APP_DIR/.env" ]; then
+              cp "$APP_DIR/.env" /tmp/lev-env.backup
             fi
 
-            if [ -f "dev.db" ]; then
-              cp dev.db /tmp/lev-db.backup
+            if [ -f "$APP_DIR/dev.db" ]; then
+              cp "$APP_DIR/dev.db" /tmp/lev-db.backup
             fi
 
-            if [ -d "public/uploads" ]; then
-              cp -a public/uploads /tmp/lev-uploads.backup
+            if [ -f "$APP_DIR/dev.db-wal" ]; then
+              cp "$APP_DIR/dev.db-wal" /tmp/lev-db-wal.backup
+            fi
+
+            if [ -f "$APP_DIR/dev.db-shm" ]; then
+              cp "$APP_DIR/dev.db-shm" /tmp/lev-db-shm.backup
+            fi
+
+            if [ -d "$APP_DIR/public/uploads" ]; then
+              cp -a "$APP_DIR/public/uploads" /tmp/lev-uploads.backup
             fi
 
             echo "Removing old build..."
 
-            rm -rf .next
-            rm -rf src/generated/prisma
+            rm -rf "$APP_DIR/.next"
+            rm -rf "$APP_DIR/src/generated/prisma"
 
-            echo "Extracting..."
+            echo "Extracting new deployment..."
 
             unzip -oq "$ZIP_PATH" -d "$APP_DIR"
 
             echo "Restoring persistent files..."
 
             if [ -f /tmp/lev-env.backup ]; then
-              mv /tmp/lev-env.backup .env
+              mv /tmp/lev-env.backup "$APP_DIR/.env"
             fi
 
             if [ -f /tmp/lev-db.backup ]; then
-              mv /tmp/lev-db.backup dev.db
+              mv /tmp/lev-db.backup "$APP_DIR/dev.db"
+            fi
+
+            if [ -f /tmp/lev-db-wal.backup ]; then
+              mv /tmp/lev-db-wal.backup "$APP_DIR/dev.db-wal"
+            fi
+
+            if [ -f /tmp/lev-db-shm.backup ]; then
+              mv /tmp/lev-db-shm.backup "$APP_DIR/dev.db-shm"
             fi
 
             if [ -d /tmp/lev-uploads.backup ]; then
-              rm -rf public/uploads
-              mv /tmp/lev-uploads.backup public/uploads
+              rm -rf "$APP_DIR/public/uploads"
+              mv /tmp/lev-uploads.backup "$APP_DIR/public/uploads"
             fi
 
-            if [ ! -f ".env" ] && [ -f ".env.example" ]; then
-              cp .env.example .env
+            if [ ! -f "$APP_DIR/.env" ]; then
+              if [ -f "$APP_DIR/.env.example" ]; then
+                cp "$APP_DIR/.env.example" "$APP_DIR/.env"
+                echo "Created .env from .env.example"
+              else
+                echo "ERROR: .env and .env.example are missing"
+                exit 1
+              fi
             fi
 
-            echo "Installing dependencies..."
+            echo "Restarting Passenger..."
 
-            npm --prefix "$APP_DIR" install \
-              --ignore-scripts
+            mkdir -p "$APP_DIR/tmp"
+            touch "$APP_DIR/tmp/restart.txt"
 
-            echo "Running setup..."
+            rm -f "$ZIP_PATH"
 
-            npm --prefix "$APP_DIR" run setup
-
-            echo "Deploy completed successfully."
+            echo "Deploy completed successfully → $APP_DIR"
