@@ -131,27 +131,18 @@ jobs:
 
             echo "Installing dependencies..."
 
-            npm --prefix "$APP_DIR" install \
-              --ignore-scripts \
-              --include=dev
+            npm --prefix "$APP_DIR" install --ignore-scripts
 
             echo "Running setup..."
 
             npm --prefix "$APP_DIR" run setup
 
-            echo "Building..."
+            echo "Building application..."
 
             npm --prefix "$APP_DIR" run build
 
-            echo "Removing dev dependencies..."
+            echo "Removing development dependencies..."
 
             npm --prefix "$APP_DIR" prune --omit=dev
-
-            echo "Restarting Passenger..."
-
-            mkdir -p tmp
-            touch tmp/restart.txt
-
-            rm -f "$ZIP_PATH"
 
             echo "Deploy completed successfully."
