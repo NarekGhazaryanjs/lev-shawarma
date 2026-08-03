@@ -59,6 +59,7 @@ jobs:
 
             APP_DIR="${{ secrets.DEPLOY_PATH }}"
             ZIP_PATH="/tmp/deploy.zip"
+            STAGE="$APP_DIR/.deploy-staging"
 
             if [ -z "$APP_DIR" ]; then
               echo "DEPLOY_PATH secret is empty"
@@ -73,17 +74,38 @@ jobs:
             mkdir -p "$APP_DIR" "$APP_DIR/tmp" "$APP_DIR/public/uploads"
             cd "$APP_DIR"
 
+            # Make sure we can write over previous upload leftovers
+            chmod -R u+rwX "$APP_DIR" 2>/dev/null || true
+
+            rm -rf "$STAGE"
+            mkdir -p "$STAGE"
+            unzip -o "$ZIP_PATH" -d "$STAGE"
+
+            # Preserve production data
             if [ -f .env ]; then cp .env /tmp/lev-env.backup; fi
             if [ -f dev.db ]; then cp dev.db /tmp/lev-db.backup; fi
 
-            unzip -o "$ZIP_PATH"
+            # Clear old code trees that may have broken permissions from prior uploads
+            rm -rf src scripts prisma server.js package.json package-lock.json 2>/dev/null || true
+            chmod -R u+rwX "$APP_DIR" 2>/dev/null || true
+
+            # Sync project files (keep uploads + node_modules)
+            rsync -a --delete \
+              --exclude '.env' \
+              --exclude 'dev.db' \
+              --exclude 'dev.db-*' \
+              --exclude 'node_modules' \
+              --exclude '.next' \
+              --exclude 'public/uploads' \
+              --exclude '.deploy-staging' \
+              --exclude 'tmp' \
+              "$STAGE"/ "$APP_DIR"/
+
+            rm -rf "$STAGE"
 
             if [ -f /tmp/lev-env.backup ]; then mv /tmp/lev-env.backup .env; fi
             if [ -f /tmp/lev-db.backup ]; then mv /tmp/lev-db.backup dev.db; fi
-
-            if [ ! -f .env ]; then
-              cp .env.example .env
-            fi
+            if [ ! -f .env ]; then cp .env.example .env; fi
 
             if [ -d "$HOME/nodevenv/levshawarma.com/20/bin" ]; then
               export PATH="$HOME/nodevenv/levshawarma.com/20/bin:$PATH"
@@ -97,6 +119,5 @@ jobs:
 
             mkdir -p tmp
             touch tmp/restart.txt
-
             rm -f "$ZIP_PATH"
             echo "Deploy finished → $APP_DIR"
