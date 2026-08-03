@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      run_npm_install:
+        description: "Also run npm install + prisma generate on the server"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-production
@@ -45,8 +51,10 @@ jobs:
           target: /tmp/
           overwrite: true
 
-      - name: Unzip and npm install on server
+      - name: Unzip, copy, and restart app
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          RUN_NPM_INSTALL: ${{ github.event.inputs.run_npm_install == 'true' }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
@@ -54,6 +62,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: ${{ secrets.SSH_PORT || 22 }}
+          envs: RUN_NPM_INSTALL
           script: |
             set -euo pipefail
 
@@ -74,7 +83,6 @@ jobs:
             mkdir -p "$APP_DIR" "$APP_DIR/tmp" "$APP_DIR/public/uploads"
             cd "$APP_DIR"
 
-            # Make sure we can write over previous upload leftovers
             chmod -R u+rwX "$APP_DIR" 2>/dev/null || true
 
             rm -rf "$STAGE"
@@ -89,7 +97,7 @@ jobs:
             rm -rf src scripts prisma server.js package.json package-lock.json 2>/dev/null || true
             chmod -R u+rwX "$APP_DIR" 2>/dev/null || true
 
-            # Copy project files from staging (keep uploads/node_modules/.env/db)
+            # Copy project files from staging (keep uploads/node_modules/.env/db/.next)
             shopt -s dotglob
             for item in "$STAGE"/*; do
               name="$(basename "$item")"
@@ -97,7 +105,6 @@ jobs:
                 .env|dev.db|node_modules|.next|tmp|.deploy-staging) continue ;;
                 public)
                   mkdir -p "$APP_DIR/public"
-                  # copy public except uploads folder contents replacement carefully
                   for pub in "$item"/*; do
                     pubname="$(basename "$pub")"
                     if [ "$pubname" = "uploads" ]; then
@@ -123,37 +130,36 @@ jobs:
             if [ -f /tmp/lev-db.backup ]; then mv /tmp/lev-db.backup dev.db; fi
             if [ ! -f .env ]; then cp .env.example .env; fi
 
-            echo "Looking for Node.js..."
-            ls -la "$HOME/nodevenv/levshawarma.com" || true
+            if [ "${RUN_NPM_INSTALL:-false}" = "true" ]; then
+              echo "Optional npm install requested..."
+              for v in 22 20.20 20 22.12 18 19; do
+                BIN="$HOME/nodevenv/levshawarma.com/$v/bin"
+                if [ -x "$BIN/node" ]; then
+                  export PATH="$BIN:$PATH"
+                  echo "Using nodevenv bin $v"
+                  break
+                fi
+              done
 
-            for v in 22 20.20 20 22.12 18 19; do
-              BIN="$HOME/nodevenv/levshawarma.com/$v/bin"
-              if [ -x "$BIN/node" ]; then
-                export PATH="$BIN:$PATH"
-                echo "Using nodevenv bin $v"
-                break
+              if ! command -v node >/dev/null 2>&1; then
+                echo "ERROR: node not found for optional npm install"
+                exit 1
               fi
-            done
 
-            if ! command -v node >/dev/null 2>&1; then
-              NODE_BIN="$(find "$HOME/nodevenv" -type f -name node 2>/dev/null | head -n 1 || true)"
-              if [ -n "$NODE_BIN" ]; then
-                export PATH="$(dirname "$NODE_BIN"):$PATH"
-                echo "Found node at $NODE_BIN"
-              fi
+              echo "Node: $(node -v)"
+              echo "npm: $(npm -v)"
+              npm install --prefix "$APP_DIR"
+              (cd "$APP_DIR" && npx prisma generate)
+            else
+              echo "Skipping npm install (default). Restart only."
             fi
 
-            if ! command -v node >/dev/null 2>&1; then
-              echo "ERROR: node not found. Set Node.js App version to 20.20+ or 22.12+ in cPanel."
-              exit 1
-            fi
-
-            echo "Node: $(node -v)"
-            echo "npm: $(npm -v)"
-            npm install
-            npx prisma generate
-
+            # cPanel Node.js app restart signals
             mkdir -p tmp
             touch tmp/restart.txt
+            touch "$APP_DIR/tmp/restart.txt"
+            # Passenger / cPanel sometimes also watches these
+            if [ -d "$HOME/tmp" ]; then touch "$HOME/tmp/restart.txt" 2>/dev/null || true; fi
+
             rm -f "$ZIP_PATH"
-            echo "Deploy finished → $APP_DIR"
+            echo "Deploy finished → $APP_DIR (restart signaled)"
