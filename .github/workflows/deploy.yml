@@ -23,7 +23,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -68,6 +68,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: ${{ secrets.SSH_PORT || 22 }}
+          command_timeout: 40m
           envs: RUN_NPM_INSTALL,RUN_BUILD
           script: |
             set -euo pipefail
@@ -95,15 +96,12 @@ jobs:
             mkdir -p "$STAGE"
             unzip -o "$ZIP_PATH" -d "$STAGE"
 
-            # Preserve production data
             if [ -f .env ]; then cp .env /tmp/lev-env.backup; fi
             if [ -f dev.db ]; then cp dev.db /tmp/lev-db.backup; fi
 
-            # Clear old code trees that may have broken permissions from prior uploads
             rm -rf src scripts prisma server.js package.json package-lock.json 2>/dev/null || true
             chmod -R u+rwX "$APP_DIR" 2>/dev/null || true
 
-            # Copy project files from staging (keep uploads/node_modules/.env/db/.next)
             shopt -s dotglob
             for item in "$STAGE"/*; do
               name="$(basename "$item")"
@@ -138,14 +136,22 @@ jobs:
 
             if [ "${RUN_NPM_INSTALL:-false}" = "true" ] || [ "${RUN_BUILD:-false}" = "true" ]; then
               echo "Installing dependencies..."
+              set +u
               for v in 22 20.20 20 22.12 18 19; do
+                ACT="$HOME/nodevenv/levshawarma.com/$v/bin/activate"
                 BIN="$HOME/nodevenv/levshawarma.com/$v/bin"
-                if [ -x "$BIN/node" ]; then
+                if [ -f "$ACT" ]; then
+                  # shellcheck disable=SC1090
+                  . "$ACT"
+                  echo "Activated nodevenv $v"
+                  break
+                elif [ -x "$BIN/node" ]; then
                   export PATH="$BIN:$PATH"
                   echo "Using nodevenv bin $v"
                   break
                 fi
               done
+              set -u
 
               if ! command -v node >/dev/null 2>&1; then
                 echo "ERROR: node not found"
@@ -155,21 +161,21 @@ jobs:
               echo "Node: $(node -v)"
               echo "npm: $(npm -v)"
               cd "$APP_DIR"
-              npm install
-              npx prisma generate
+              # Avoid postinstall prisma generate in wrong CloudLinux npm prefix cwd
+              npm install --ignore-scripts
+              npx prisma generate --schema=./prisma/schema.prisma
 
               if [ "${RUN_BUILD:-false}" = "true" ]; then
                 echo "Building Next.js..."
                 npm run build
               fi
-              cd "$APP_DIR"            else
+            else
               echo "Skipping npm install/build (default). Restart only."
             fi
-            # cPanel Node.js app restart signals
+
             mkdir -p tmp
             touch tmp/restart.txt
             touch "$APP_DIR/tmp/restart.txt"
-            # Passenger / cPanel sometimes also watches these
             if [ -d "$HOME/tmp" ]; then touch "$HOME/tmp/restart.txt" 2>/dev/null || true; fi
 
             rm -f "$ZIP_PATH"
