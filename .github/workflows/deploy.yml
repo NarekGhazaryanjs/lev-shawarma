@@ -59,18 +59,15 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           command_timeout: 25m
           script: |
-            echo "SSH user: $(whoami)"
-            echo "HOME: $HOME"
-            echo "APP_DIR: $APP_DIR"
-
-            ls -la "$HOME" || true
-            ls -la "$HOME/nodevenv" || true
-            find "$HOME/nodevenv" -maxdepth 5 -type f -name node 2>/dev/null || true
-
+            script: |
             set -euo pipefail
 
             APP_DIR="${{ secrets.DEPLOY_PATH }}"
             ZIP_PATH="/tmp/deploy.zip"
+
+            echo "SSH user: $(whoami)"
+            echo "HOME: $HOME"
+            echo "APP_DIR: $APP_DIR"
 
             if [ -z "$APP_DIR" ]; then
               echo "ERROR: DEPLOY_PATH secret is empty"
@@ -82,19 +79,32 @@ jobs:
               exit 1
             fi
 
-            mkdir -p "$APP_DIR"
-            mkdir -p "$APP_DIR/tmp"
-            mkdir -p "$APP_DIR/public/uploads"
-
-            NODE_BIN="/home/wmflggzahnbx/nodevenv/levshawarma.com/22/bin"
+            NODE_BIN="$HOME/nodevenv/levshawarma.com/22/bin"
 
             if [ ! -d "$NODE_BIN" ]; then
               echo "ERROR: Node bin directory not found: $NODE_BIN"
+              echo "Searching available Node binaries..."
+
+              find "$HOME/nodevenv" \
+                -maxdepth 5 \
+                -type f \
+                -name node \
+                2>/dev/null || true
+
               exit 1
             fi
 
             export PATH="$NODE_BIN:$PATH"
             hash -r
+
+            echo "Node path: $(command -v node)"
+            echo "npm path: $(command -v npm)"
+            echo "Node: $(node -v)"
+            echo "npm: $(npm -v)"
+
+            mkdir -p "$APP_DIR"
+            mkdir -p "$APP_DIR/tmp"
+            mkdir -p "$APP_DIR/public/uploads"
 
             cd "$APP_DIR"
 
