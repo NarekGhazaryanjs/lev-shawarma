@@ -72,23 +72,13 @@ jobs:
             APP_HOME="$(dirname "$APP_DIR")"
             APP_NAME="$(basename "$APP_DIR")"
 
-            NODE_BIN="$(find "$APP_HOME/nodevenv/$APP_NAME" \
-              -maxdepth 4 \
-              -type d \
-              -name bin \
-              | head -n1)"
-
-            if [ -z "$NODE_BIN" ]; then
-              echo "Node environment not found"
-              find "$APP_HOME/nodevenv" -maxdepth 5
-              exit 1
-            fi
+            NODE_BIN="${{ secrets.NODE_BIN }}"
 
             export PATH="$NODE_BIN:$PATH"
             hash -r
 
-            echo "Node: $(node -v)"
-            echo "npm : $(npm -v)"
+            node -v
+            npm -v
 
             mkdir -p "$APP_DIR"
             mkdir -p "$APP_DIR/tmp"
