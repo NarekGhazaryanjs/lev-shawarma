@@ -28,7 +28,6 @@ jobs:
             -x "node_modules/*" \
             -x ".git/*" \
             -x ".github/*" \
-            -x ".next/*" \
             -x "tmp/*" \
             -x "*.zip"
 
@@ -137,11 +136,5 @@ jobs:
             echo "Running setup..."
 
             npm --prefix "$APP_DIR" run setup
-
-            echo "Building..."
-
-            export NODE_OPTIONS="--max-old-space-size=512"
-            
-            npm --prefix "$APP_DIR" run build
 
             echo "Deploy completed successfully."
