@@ -195,13 +195,10 @@ jobs:
 
             echo "Deploy completed successfully → $APP_DIR"
 
-            echo "Restarting Passenger application..."
+            echo "Restarting CloudLinux Node.js application..."
 
-            mkdir -p "$APP_DIR/tmp"
-            rm -f "$APP_DIR/tmp/restart.txt"
-            touch "$APP_DIR/tmp/restart.txt"
-
-            sleep 3
-            curl -fsS https://levshawarma.com/ >/dev/null || true
-
-            echo "Passenger restart requested."
+            cloudlinux-selector restart \
+              --json \
+              --interpreter nodejs \
+              --user wmflggzahnbx \
+              --app-root "$APP_DIR"
