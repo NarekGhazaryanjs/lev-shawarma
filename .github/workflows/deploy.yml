@@ -194,3 +194,11 @@ jobs:
             rm -f "$ZIP_PATH"
 
             echo "Deploy completed successfully → $APP_DIR"
+
+            echo "Restarting Passenger application..."
+
+            mkdir -p "$APP_DIR/tmp"
+            rm -f "$APP_DIR/tmp/restart.txt"
+            touch "$APP_DIR/tmp/restart.txt"
+
+            echo "Passenger restart requested."
