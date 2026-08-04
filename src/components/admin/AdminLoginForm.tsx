@@ -38,7 +38,7 @@ export function AdminLoginForm() {
       <h1 className="title-lg mb-6">Մուտք</h1>
       <div className="space-y-4">
         <label className="block">
-          <span className="text-soft mb-2 block text-sm font-semibold">Մուտքանուն!</span>
+          <span className="text-soft mb-2 block text-sm font-semibold">Մուտքանուն!!</span>
           <input
             className="w-full rounded-2xl border border-black/10 bg-cream px-4 py-3 outline-none focus:border-brand"
             value={username}

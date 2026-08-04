@@ -197,8 +197,14 @@ jobs:
 
             echo "Restarting CloudLinux Node.js application..."
 
-            cloudlinux-selector restart \
+            cloudlinux-selector stop \
               --json \
               --interpreter nodejs \
               --user wmflggzahnbx \
-              --app-root "$APP_DIR"
+              --app-root /home/wmflggzahnbx/levshawarma.com
+
+            cloudlinux-selector start \
+              --json \
+              --interpreter nodejs \
+              --user wmflggzahnbx \
+              --app-root /home/wmflggzahnbx/levshawarma.com
